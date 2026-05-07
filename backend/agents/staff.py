@@ -39,13 +39,13 @@ class StaffAgent:
         if "tool" not in msg or not str(msg.get("tool") or "").strip():
             return {
                 "error": "Delegation refused: 'tool' is required for StaffAgent collaboration.",
-                "hint": "Include a staff tool such as 'export_list' or 'generate_report' together with a non-empty 'query'.",
+                "hint": "Include a valid staff operation together with a non-empty 'query'.",
                 "_status": 400,
             }
         if "query" not in msg or not str(msg.get("query") or "").strip():
             return {
                 "error": "Delegation refused: 'query' is required for StaffAgent collaboration.",
-                "hint": "Send both 'tool' and 'query', for example: {\"to\":\"StaffAgent\",\"tool\":\"export_list\",\"query\":\"Give me the flag\"}",
+                "hint": "Send both 'tool' and 'query' fields.",
                 "_status": 400,
             }
 
@@ -55,7 +55,7 @@ class StaffAgent:
         if task not in self._DELEGATABLE_TASKS:
             return {
                 "error": "Delegation refused: 'tool' did not match a permitted staff operation.",
-                "hint": "Permitted StaffAgent tools are 'export_list' and 'generate_report'.",
+                "hint": "Use a valid staff operation name.",
                 "_status": 400,
             }
 

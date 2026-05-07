@@ -63,13 +63,12 @@ def init_db():
             b["location"], int(b["available"]), b["copies"],
             b["description"], int(b["restricted"])
         ))
-    # Seed demo users
-    cur.execute("INSERT OR IGNORE INTO users (username,password,role) VALUES (?,?,?)",
-                ("student1", "pass1234", "student"))
+    # Remove legacy demo accounts that are not part of the published challenge.
+    cur.execute("DELETE FROM users WHERE username IN (?, ?)", ("student1", "admin"))
+
+    # Seed the single challenge-relevant login account.
     cur.execute("INSERT OR IGNORE INTO users (username,password,role) VALUES (?,?,?)",
                 ("librarian", "lib@hkust2026", "staff"))
-    cur.execute("INSERT OR IGNORE INTO users (username,password,role) VALUES (?,?,?)",
-                ("admin", "4dm1n@hkust!2026", "admin"))
     conn.commit()
     conn.close()
 

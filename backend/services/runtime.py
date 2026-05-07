@@ -5,9 +5,6 @@ CTF endpoints so the challenge surfaces exercise the same underlying logic
 instead of being disconnected wrappers.
 """
 
-import re
-from difflib import SequenceMatcher
-
 from config import AGENT_ROUTING_KEY
 from memory import get_routing_collection, get_session_collection
 from agents.catalog import CatalogAgent
@@ -29,7 +26,6 @@ _GENERIC_FORBIDDEN_ANSWER = (
     "I'm not able to provide information about internal system architecture, "
     "agent configurations, or tool interfaces."
 )
-_ROUTING_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def _build_agent_context(msg: dict, user: dict | None) -> dict:
@@ -139,76 +135,7 @@ def dispatch_agent_message(
     }
 
 
-def _tokenize_routing_text(text: str) -> set[str]:
-    return set(_ROUTING_TOKEN_RE.findall((text or "").lower()))
-
-
-def _extract_client_routing_memory(context: dict | None) -> list[dict]:
-    if not isinstance(context, dict):
-        return []
-
-    records = context.get("client_routing_memory")
-    if not isinstance(records, list):
-        return []
-
-    sanitized_records = []
-    for entry in records[:100]:
-        if not isinstance(entry, dict):
-            continue
-
-        document = entry.get("document")
-        metadata = entry.get("metadata")
-        if not isinstance(document, str) or not isinstance(metadata, dict):
-            continue
-        if metadata.get("success") is not True:
-            continue
-        if metadata.get("source") != "system_supervisor":
-            continue
-
-        sanitized_records.append({
-            "document": document,
-            "metadata": metadata,
-        })
-
-    return sanitized_records
-
-
-def _score_client_routing_record(query: str, query_tokens: set[str], document: str) -> float:
-    document_tokens = _tokenize_routing_text(document)
-    if not query_tokens or not document_tokens:
-        return 0.0
-
-    overlap = len(query_tokens & document_tokens) / len(query_tokens)
-    lexical_similarity = SequenceMatcher(None, query.lower(), document.lower()).ratio()
-    substring_bonus = 1.0 if query.lower() in document.lower() else 0.0
-    return overlap + (lexical_similarity * 0.35) + substring_bonus
-
-
-def _query_client_routing_memory(query: str, records: list[dict]) -> tuple[str, str]:
-    query_tokens = _tokenize_routing_text(query)
-    best_metadata = None
-    best_score = 0.0
-
-    for entry in records:
-        score = _score_client_routing_record(query, query_tokens, entry["document"])
-        if score > best_score:
-            best_score = score
-            best_metadata = entry["metadata"]
-
-    if best_metadata is None:
-        return _DEFAULT_ROUTING_TARGET, _DEFAULT_ROUTING_TOOL
-
-    return (
-        best_metadata.get("routed_to", _DEFAULT_ROUTING_TARGET),
-        best_metadata.get("tool_used", _DEFAULT_ROUTING_TOOL),
-    )
-
-
 def query_routing_memory(query: str, context: dict | None = None) -> tuple[str, str]:
-    client_records = _extract_client_routing_memory(context)
-    if client_records:
-        return _query_client_routing_memory(query, client_records)
-
     routing = get_routing_collection()
     results = routing.query(
         query_texts=[query],

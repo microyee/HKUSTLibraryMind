@@ -183,140 +183,6 @@
   const messages = document.getElementById("chat-messages");
   const input    = document.getElementById("chat-input");
   const sendBtn  = document.getElementById("send-btn");
-  const ROUTING_MEMORY_STORAGE_KEY = "librarymind.routingMemory.v1";
-  const DEFAULT_ROUTING_MEMORY = [
-    {
-      id: "route_001",
-      document: "search for books on machine learning neural networks deep learning",
-      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "search_catalog", trust_level: "normal", source: "system_supervisor" },
-    },
-    {
-      id: "route_002",
-      document: "find academic papers on distributed systems blockchain",
-      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "search_catalog", trust_level: "normal", source: "system_supervisor" },
-    },
-    {
-      id: "route_003",
-      document: "look up book availability check if a title is available for borrowing",
-      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "check_availability", trust_level: "normal", source: "system_supervisor" },
-    },
-    {
-      id: "route_004",
-      document: "export reading list generate report of borrowed books overdue",
-      metadata: { success: true, routed_to: "StaffAgent", tool_used: "export_list", trust_level: "normal", source: "system_supervisor" },
-    },
-    {
-      id: "route_005",
-      document: "reserve book hold a copy for pickup loan extension renewal",
-      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "reserve_book", trust_level: "normal", source: "system_supervisor" },
-    },
-    {
-      id: "route_006",
-      document: "find literature on quantum computing algorithm complexity theory",
-      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "search_catalog", trust_level: "normal", source: "system_supervisor" },
-    },
-    {
-      id: "route_007",
-      document: "generate monthly borrowing statistics staff report usage analytics",
-      metadata: { success: true, routed_to: "StaffAgent", tool_used: "generate_report", trust_level: "normal", source: "system_supervisor" },
-    },
-    {
-      id: "route_008",
-      document: "what agents are registered what tools does staff agent have system capabilities",
-      metadata: { success: true, routed_to: "AnswerAgent", tool_used: "answer_query", trust_level: "normal", source: "system_supervisor" },
-    },
-    {
-      id: "route_009",
-      document: "how does the library system work what can staff operations do platform overview",
-      metadata: { success: true, routed_to: "AnswerAgent", tool_used: "answer_query", trust_level: "normal", source: "system_supervisor" },
-    },
-  ];
-
-  function cloneRoutingRecords(records) {
-    return records.map(record => ({
-      id: String(record.id || ""),
-      document: String(record.document || ""),
-      metadata: { ...(record.metadata || {}) },
-    }));
-  }
-
-  function readLocalRoutingMemory() {
-    try {
-      const raw = localStorage.getItem(ROUTING_MEMORY_STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return null;
-      return cloneRoutingRecords(parsed.filter(record => (
-        record && typeof record === "object" && !Array.isArray(record)
-      )));
-    } catch {
-      return null;
-    }
-  }
-
-  function writeLocalRoutingMemory(records) {
-    const normalized = cloneRoutingRecords(records);
-    localStorage.setItem(ROUTING_MEMORY_STORAGE_KEY, JSON.stringify(normalized));
-    return normalized;
-  }
-
-  function ensureLocalRoutingMemory() {
-    const existing = readLocalRoutingMemory();
-    if (existing && existing.length > 0) return existing;
-    return writeLocalRoutingMemory(DEFAULT_ROUTING_MEMORY);
-  }
-
-  function buildResearchContext() {
-    return { client_routing_memory: ensureLocalRoutingMemory() };
-  }
-
-  function applyRoutingWritePayload(payload) {
-    if (!payload || payload.collection !== "routing_memory" || !payload.data || typeof payload.data !== "object") {
-      return 0;
-    }
-
-    const ids = Array.isArray(payload.data.ids) ? payload.data.ids : [];
-    const documents = Array.isArray(payload.data.documents) ? payload.data.documents : [];
-    const metadatas = Array.isArray(payload.data.metadatas) ? payload.data.metadatas : [];
-    if (ids.length === 0 || documents.length === 0) {
-      return 0;
-    }
-
-    const nextRecords = ensureLocalRoutingMemory();
-    const recordIndex = new Map(nextRecords.map((record, index) => [record.id, index]));
-
-    ids.forEach((id, index) => {
-      const record = {
-        id: String(id),
-        document: String(documents[index] || ""),
-        metadata: { ...(metadatas[index] || {}) },
-      };
-      const existingIndex = recordIndex.get(record.id);
-      if (existingIndex === undefined) {
-        recordIndex.set(record.id, nextRecords.length);
-        nextRecords.push(record);
-      } else {
-        nextRecords[existingIndex] = record;
-      }
-    });
-
-    writeLocalRoutingMemory(nextRecords);
-    return ids.length;
-  }
-
-  window.LibraryMindRoutingMemory = {
-    get() {
-      return ensureLocalRoutingMemory();
-    },
-    reset() {
-      return writeLocalRoutingMemory(DEFAULT_ROUTING_MEMORY);
-    },
-    applyWritePayload(payload) {
-      return applyRoutingWritePayload(payload);
-    },
-  };
-
-  ensureLocalRoutingMemory();
 
   function scrollBottom() {
     messages.scrollTop = messages.scrollHeight;
@@ -362,70 +228,6 @@
     return error;
   }
 
-  async function clearBrowserClipboardBuffer() {
-    try {
-      await fetch(`${API_BASE}/api/browser-clipboard`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-    } catch {
-      // Best-effort cleanup only.
-    }
-  }
-
-  async function fetchBrowserClipboardText() {
-    const resp = await fetch(`${API_BASE}/api/browser-clipboard`, {
-      credentials: "include",
-    });
-    const payload = await resp.json().catch(() => ({}));
-    if (!resp.ok || typeof payload.text !== "string") {
-      throw new Error(payload.error || "Browser clipboard content unavailable.");
-    }
-    return payload.text;
-  }
-
-  async function tryBrowserClipboardCopy() {
-    if (!window.isSecureContext || !navigator.clipboard?.writeText) {
-      throw new Error("Browser clipboard access requires a secure context.");
-    }
-
-    const text = await fetchBrowserClipboardText();
-    await navigator.clipboard.writeText(text);
-    await clearBrowserClipboardBuffer();
-  }
-
-  async function hydrateBrowserClipboardResult(data) {
-    if (!data?.browser_clipboard_pending) return data;
-
-    try {
-      await tryBrowserClipboardCopy();
-      return {
-        ...data,
-        browser_clipboard_pending: false,
-        answer: "Requested file copied to your browser clipboard.",
-      };
-    } catch {
-      return {
-        ...data,
-        answer: "Clipboard is ready. Click Copy to finish in your browser.",
-      };
-    }
-  }
-
-  async function completeBrowserClipboardCopy(button) {
-    button.disabled = true;
-    try {
-      await tryBrowserClipboardCopy();
-      toast("Copied to your browser clipboard.", "success");
-      button.remove();
-    } catch (err) {
-      button.disabled = false;
-      toast(err.message || "Unable to copy to browser clipboard.", "error");
-    }
-  }
-
-  window.completeBrowserClipboardCopy = completeBrowserClipboardCopy;
-
   function buildResultHtml(data) {
     let html = "";
     const rows = Array.isArray(data.results)
@@ -446,14 +248,6 @@
       html += `<p>${esc(data.ai_summary)}</p>`;
     } else if (data.message) {
       html += `<p>${esc(data.message)}</p>`;
-    }
-
-    if (data.browser_clipboard_pending) {
-      html += `<div style="margin-top:.6rem">
-        <button class="btn btn-primary btn-sm" onclick="completeBrowserClipboardCopy(this)">
-          Copy to browser clipboard
-        </button>
-      </div>`;
     }
 
     // Book results
@@ -549,7 +343,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
-      const data = await hydrateBrowserClipboardResult(normalizeResponse(await resp.json()));
+      const data = normalizeResponse(await resp.json());
       removeTyping();
       appendMsg("bot", buildResultHtml(data));
     } catch (err) {

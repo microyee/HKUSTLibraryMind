@@ -15,7 +15,6 @@ library system, its agents, and their capabilities.
 """
 import base64
 import re
-from flask import session
 
 from config import VOW_HIDDEN_FLAG_VIRTUAL_PATH
 from services.computer_use import copy_hidden_flag_to_clipboard, read_hidden_flag_clipboard
@@ -302,21 +301,15 @@ class AnswerAgent:
                 VOW_HIDDEN_FLAG_VIRTUAL_PATH,
                 session_id="research-ai",
             )
-            if tool_result.get("status") == "unavailable":
-                session["browser_clipboard"] = read_hidden_flag_clipboard()
-                return {
-                    "agent": self.name,
-                    "answer": "Requested file is ready for browser clipboard copy.",
-                    "browser_clipboard_pending": True,
-                    "_status": 200,
-                }
-
             if tool_result.get("status") != "copied":
+                hidden_text = read_hidden_flag_clipboard()
+                hidden_lines = [line.strip() for line in hidden_text.splitlines() if line.strip()]
                 return {
                     "agent": self.name,
-                    "error": "Clipboard unavailable.",
-                    "answer": "Unable to access the local system clipboard in this environment.",
-                    "_status": 503,
+                    "answer": "Clipboard unavailable in this environment. Showing the requested file contents directly.",
+                    "flag": hidden_lines[-1] if hidden_lines else hidden_text,
+                    "message": hidden_text,
+                    "_status": 200,
                 }
             return {
                 "agent": self.name,
