@@ -334,7 +334,7 @@
     const typing = addTyping();
     const agentPayload = parseAgentPayload(query);
     const endpoint = agentPayload ? `${API_BASE}/api/agent/collaborate` : `${API_BASE}/api/research`;
-    const requestBody = agentPayload ? agentPayload : { query, context: buildResearchContext() };
+    const requestBody = agentPayload ? agentPayload : { query };
 
     try {
       const resp = await fetch(endpoint, {
