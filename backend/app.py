@@ -36,11 +36,22 @@ from services.runtime import (
     write_memory_records,
 )
 
+_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "https://hkustlibrarymind.vercel.app",
+]
+
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
-CORS(app, supports_credentials=True, origins=["http://localhost:3000", "http://127.0.0.1:3000",
-                                               "http://localhost:5500", "http://127.0.0.1:5500",
-                                               "null"])
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SECURE=True,
+)
+CORS(app, supports_credentials=True, origins=_CORS_ORIGINS)
 
 _audit_agent  = _AuditAgentClass()
 
