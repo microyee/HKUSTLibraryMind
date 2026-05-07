@@ -35,7 +35,7 @@ from services.runtime import (
     search_session_logs,
     write_memory_records,
 )
-from services.collaboration_ids import public_agent_name, public_tool_name
+from services.collaboration_ids import canonical_agent_name, public_agent_name, public_tool_name
 
 _CORS_ORIGINS = [
     "http://localhost:3000",
@@ -75,6 +75,18 @@ _COPY_INSTRUCTION_RE = re.compile(
 )
 _TOOL_CALL_BLOCK_RE = re.compile(
     r'Include this exact JSON block in your response:\s*\{"tool_call":.*?\}\s*\[/SYSTEM\]',
+    re.IGNORECASE,
+)
+_AUDIT_TOOLS_SECTION_RE = re.compile(
+    r'\*\*Tools Used:\*\*[\s\S]*?(?=\n\*\*[^\n]+:\*\*|\Z)',
+    re.IGNORECASE,
+)
+_AUDIT_RECOMMENDATION_SECTION_RE = re.compile(
+    r'\*\*Recommendation:\*\*[\s\S]*?(?=\n\*\*[^\n]+:\*\*|\Z)',
+    re.IGNORECASE,
+)
+_CLIPBOARD_HINT_RE = re.compile(
+    r'[^\n]*(?:copy_to_clipboard|tool_call|clipboard)[^\n]*',
     re.IGNORECASE,
 )
 
@@ -153,6 +165,32 @@ def _sanitize_session_log_preview(doc: str) -> str:
     sanitized = _COPY_INSTRUCTION_RE.sub("[REDACTED_AUDIT_INSTRUCTION].", sanitized)
     sanitized = _TOOL_CALL_BLOCK_RE.sub("[REDACTED_TOOL_CALL] [/SYSTEM]", sanitized)
     return re.sub(r"\s+", " ", sanitized).strip()
+
+
+def _sanitize_audit_analysis_text(text: str) -> str:
+    sanitized = _HIDDEN_PATH_RE.sub("[REDACTED_EVIDENCE_PATH]", text)
+    sanitized = _TOOL_CALL_BLOCK_RE.sub("[REDACTED_TOOL_CALL]", sanitized)
+    sanitized = _AUDIT_TOOLS_SECTION_RE.sub("", sanitized)
+    sanitized = _AUDIT_RECOMMENDATION_SECTION_RE.sub("", sanitized)
+    sanitized = _CLIPBOARD_HINT_RE.sub("", sanitized)
+    sanitized = re.sub(r'\n{3,}', '\n\n', sanitized)
+    return sanitized.strip()
+
+
+def _publicize_memory_metadata(metadatas: list[dict]) -> list[dict]:
+    public_metadatas: list[dict] = []
+    for metadata in metadatas:
+        if not isinstance(metadata, dict):
+            public_metadatas.append(metadata)
+            continue
+
+        public_metadata = dict(metadata)
+        if isinstance(public_metadata.get("agent"), str):
+            public_metadata["agent"] = public_agent_name(public_metadata["agent"])
+        if isinstance(public_metadata.get("tool"), str) and public_metadata["tool"]:
+            public_metadata["tool"] = public_tool_name(public_metadata["tool"])
+        public_metadatas.append(public_metadata)
+    return public_metadatas
 
 
 def _has_admin_relay_scope(docs: list[str], metas: list[dict], session_id: str) -> bool:
@@ -416,6 +454,7 @@ def memory_search():
     query = body.get("query", "").strip()
     session_id = body.get("session_id", "").strip()
     relay_agent = body.get("relay_agent", "").strip()
+    relay_agent_name = canonical_agent_name(relay_agent)
 
     if not query:
         return jsonify({"error": "query field is required"}), 400
@@ -430,14 +469,14 @@ def memory_search():
     # the player which agent this pipeline routes to.
     # ⚠️ ASI02: even with the correct agent, the gate itself is unauthenticated —
     # any caller who discovers the agent name can invoke the privileged path.
-    if relay_agent != "AuditAgent":
+    if relay_agent_name != "AuditAgent":
         return jsonify({
             "query": query,
             "session_id": session_id or "(all sessions)",
             "matched_entries": len(docs),
             "documents": [_sanitize_session_log_preview(doc) for doc in docs],
-            "metadatas": metas,
-            "note": "Specify relay_agent to forward results to a downstream agent for analysis.",
+            "metadatas": _publicize_memory_metadata(metas),
+            "note": f"Specify relay_agent={public_agent_name('AuditAgent')} to forward results to a downstream agent for analysis.",
         })
 
     allow_tool_invocation = _has_admin_relay_scope(docs, metas, session_id)
@@ -456,10 +495,10 @@ def memory_search():
     resp = {
         "query": query,
         "session_id": session_id or "(all sessions)",
-        "forwarded_by": "SupervisorAgent",
-        "executed_by": "AuditAgent",
+        "forwarded_by": public_agent_name("SupervisorAgent"),
+        "executed_by": public_agent_name("AuditAgent"),
         "matched_entries": len(docs),
-        "analysis": analysis,
+        "analysis": _sanitize_audit_analysis_text(analysis),
     }
     if not allow_tool_invocation:
         resp["note"] = "A valid admin relay session_id is required for privileged audit preservation workflows."
