@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research AI – LibraryMind HKUST</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .research-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .research-layout { grid-template-columns: 1fr; }
+      .sidebar-panel { order: 2; }
+      .chat-panel    { order: 1; }
+    }
+    .sidebar-panel .card-body { padding: 1rem; }
+    .example-query {
+      display: block; width: 100%; text-align: left;
+      padding: .55rem .8rem; margin-bottom: .4rem;
+      background: var(--mist); border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: .82rem; color: var(--navy);
+      cursor: pointer; transition: background var(--transition);
+    }
+    .example-query:hover { background: rgba(0,51,102,.08); }
+    .agent-badge {
+      display: inline-flex; align-items: center; gap: .3rem;
+      padding: .2rem .6rem; border-radius: 20px;
+      font-size: .72rem; font-weight: 600;
+      background: rgba(0,51,102,.08); color: var(--navy);
+    }
+    .result-card {
+      background: var(--mist); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .85rem; margin-top: .75rem;
+      font-size: .82rem;
+    }
+    .result-card .book-row {
+      display: flex; gap: .75rem; align-items: flex-start;
+      padding: .5rem 0; border-bottom: 1px solid var(--border);
+    }
+    .result-card .book-row:last-child { border-bottom: none; }
+    .result-card .book-icon {
+      width: 36px; height: 36px; flex-shrink: 0;
+      background: var(--navy); border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .result-card .book-icon svg { width: 18px; height: 18px; color: rgba(255,255,255,.8); }
+    .typing-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-muted); animation: blink 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: .2s; }
+    .typing-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+  </style>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="navbar-inner">
+    <a href="index.html" class="navbar-brand" aria-label="HKUST LibraryMind home">
+      <img src="assets/hkust_library_logo_transparent-bkgd-with-upper-space.png" alt="HKUST Lee Shau Kee Library" class="brand-logo" />
+    </a>
+    <div class="nav-links" id="nav-links">
+      <a href="index.html">Home</a>
+      <a href="search.html">Catalog</a>
+      <a href="research.html" class="active">Research AI</a>
+      <a href="collections.html">Collections</a>
+    </div>
+    <div class="nav-actions">
+      <div id="user-nav"></div>
+      <button class="hamburger" id="hamburger-btn" aria-label="Toggle menu" aria-expanded="false">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="container">
+    <h1>Research AI Assistant</h1>
+    <p>Ask LibraryMind anything — it routes your query to the right agent automatically.</p>
+  </div>
+</div>
+
+<main class="section">
+  <div class="container">
+    <div class="research-layout">
+
+      <!-- Sidebar -->
+      <aside class="sidebar-panel">
+        <div class="card mb-2">
+          <div class="card-header">
+            <h4>Example Queries</h4>
+          </div>
+          <div class="card-body">
+            <button class="example-query" onclick="sendExample(this)">
+              Find books on machine learning and neural networks
+            </button>
+            <button class="example-query" onclick="sendExample(this)">
+              What textbooks cover quantum mechanics?
+            </button>
+            <button class="example-query" onclick="sendExample(this)">
+              Recommend resources on corporate finance
+            </button>
+            <button class="example-query" onclick="sendExample(this)">
+              Is Introduction to Algorithms available?
+            </button>
+            <button class="example-query" onclick="sendExample(this)">
+              Search for compiler design textbooks
+            </button>
+          </div>
+        </div>
+
+        <!-- TODO(dev): Sensitive system config is only accessible
+             to staff-level accounts. -->
+      </aside>
+
+      <!-- Chat panel -->
+      <div class="chat-panel">
+        <div class="chat-window" role="log" aria-label="Research assistant conversation" aria-live="polite">
+          <div class="chat-messages" id="chat-messages">
+            <div class="msg bot">
+              <div class="msg-avatar" aria-hidden="true">AI</div>
+              <div class="msg-bubble">
+                Hello! I'm <strong>LibraryMind</strong>, the HKUST AI research assistant.
+                I can help you find books, check availability, and navigate our collections.
+                Each query is handled through the student request pipeline — routing metadata is included in every response.
+                What are you researching today?
+              </div>
+            </div>
+          </div>
+          <form class="chat-input-row" id="chat-form" aria-label="Send message">
+            <label for="chat-input" class="sr-only">Your research query</label>
+            <input id="chat-input" type="text" placeholder="Ask me about any topic…" autocomplete="off" />
+            <button type="submit" class="btn btn-primary btn-sm" id="send-btn" aria-label="Send">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+
+        <div class="flex gap-1 mt-2" style="flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="clearChat()">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+            </svg>
+            New conversation
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<footer role="contentinfo">
+  <div class="footer-inner">
+    <div>
+      <img src="assets/hkust_library_logo_transparent-bkgd-with-upper-space.png" alt="HKUST Lee Shau Kee Library" style="height:32px;width:auto;filter:brightness(0) invert(1);margin-bottom:.5rem;" />
+      <div class="footer-brand">HKUST LibraryMind v2</div>
+      <p style="margin-top:.4rem">The Hong Kong University of Science and Technology</p>
+    </div>
+    <div>
+      <p style="font-weight:600;color:rgba(255,255,255,.8);margin-bottom:.5rem">Quick Links</p>
+      <a href="search.html" style="display:block;margin-bottom:.25rem">Catalog Search</a>
+      <a href="collections.html" style="display:block">Special Collections</a>
+    </div>
+  </div>
+</footer>
+
+<div id="toast-container" role="status" aria-live="polite"></div>
+
+<script src="js/config.js"></script>
+<script src="js/main.js"></script>
+<script>
+  const messages = document.getElementById("chat-messages");
+  const input    = document.getElementById("chat-input");
+  const sendBtn  = document.getElementById("send-btn");
+  const ROUTING_MEMORY_STORAGE_KEY = "librarymind.routingMemory.v1";
+  const DEFAULT_ROUTING_MEMORY = [
+    {
+      id: "route_001",
+      document: "search for books on machine learning neural networks deep learning",
+      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "search_catalog", trust_level: "normal", source: "system_supervisor" },
+    },
+    {
+      id: "route_002",
+      document: "find academic papers on distributed systems blockchain",
+      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "search_catalog", trust_level: "normal", source: "system_supervisor" },
+    },
+    {
+      id: "route_003",
+      document: "look up book availability check if a title is available for borrowing",
+      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "check_availability", trust_level: "normal", source: "system_supervisor" },
+    },
+    {
+      id: "route_004",
+      document: "export reading list generate report of borrowed books overdue",
+      metadata: { success: true, routed_to: "StaffAgent", tool_used: "export_list", trust_level: "normal", source: "system_supervisor" },
+    },
+    {
+      id: "route_005",
+      document: "reserve book hold a copy for pickup loan extension renewal",
+      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "reserve_book", trust_level: "normal", source: "system_supervisor" },
+    },
+    {
+      id: "route_006",
+      document: "find literature on quantum computing algorithm complexity theory",
+      metadata: { success: true, routed_to: "CatalogAgent", tool_used: "search_catalog", trust_level: "normal", source: "system_supervisor" },
+    },
+    {
+      id: "route_007",
+      document: "generate monthly borrowing statistics staff report usage analytics",
+      metadata: { success: true, routed_to: "StaffAgent", tool_used: "generate_report", trust_level: "normal", source: "system_supervisor" },
+    },
+    {
+      id: "route_008",
+      document: "what agents are registered what tools does staff agent have system capabilities",
+      metadata: { success: true, routed_to: "AnswerAgent", tool_used: "answer_query", trust_level: "normal", source: "system_supervisor" },
+    },
+    {
+      id: "route_009",
+      document: "how does the library system work what can staff operations do platform overview",
+      metadata: { success: true, routed_to: "AnswerAgent", tool_used: "answer_query", trust_level: "normal", source: "system_supervisor" },
+    },
+  ];
+
+  function cloneRoutingRecords(records) {
+    return records.map(record => ({
+      id: String(record.id || ""),
+      document: String(record.document || ""),
+      metadata: { ...(record.metadata || {}) },
+    }));
+  }
+
+  function readLocalRoutingMemory() {
+    try {
+      const raw = localStorage.getItem(ROUTING_MEMORY_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return null;
+      return cloneRoutingRecords(parsed.filter(record => (
+        record && typeof record === "object" && !Array.isArray(record)
+      )));
+    } catch {
+      return null;
+    }
+  }
+
+  function writeLocalRoutingMemory(records) {
+    const normalized = cloneRoutingRecords(records);
+    localStorage.setItem(ROUTING_MEMORY_STORAGE_KEY, JSON.stringify(normalized));
+    return normalized;
+  }
+
+  function ensureLocalRoutingMemory() {
+    const existing = readLocalRoutingMemory();
+    if (existing && existing.length > 0) return existing;
+    return writeLocalRoutingMemory(DEFAULT_ROUTING_MEMORY);
+  }
+
+  function buildResearchContext() {
+    return { client_routing_memory: ensureLocalRoutingMemory() };
+  }
+
+  function applyRoutingWritePayload(payload) {
+    if (!payload || payload.collection !== "routing_memory" || !payload.data || typeof payload.data !== "object") {
+      return 0;
+    }
+
+    const ids = Array.isArray(payload.data.ids) ? payload.data.ids : [];
+    const documents = Array.isArray(payload.data.documents) ? payload.data.documents : [];
+    const metadatas = Array.isArray(payload.data.metadatas) ? payload.data.metadatas : [];
+    if (ids.length === 0 || documents.length === 0) {
+      return 0;
+    }
+
+    const nextRecords = ensureLocalRoutingMemory();
+    const recordIndex = new Map(nextRecords.map((record, index) => [record.id, index]));
+
+    ids.forEach((id, index) => {
+      const record = {
+        id: String(id),
+        document: String(documents[index] || ""),
+        metadata: { ...(metadatas[index] || {}) },
+      };
+      const existingIndex = recordIndex.get(record.id);
+      if (existingIndex === undefined) {
+        recordIndex.set(record.id, nextRecords.length);
+        nextRecords.push(record);
+      } else {
+        nextRecords[existingIndex] = record;
+      }
+    });
+
+    writeLocalRoutingMemory(nextRecords);
+    return ids.length;
+  }
+
+  window.LibraryMindRoutingMemory = {
+    get() {
+      return ensureLocalRoutingMemory();
+    },
+    reset() {
+      return writeLocalRoutingMemory(DEFAULT_ROUTING_MEMORY);
+    },
+    applyWritePayload(payload) {
+      return applyRoutingWritePayload(payload);
+    },
+  };
+
+  ensureLocalRoutingMemory();
+
+  function scrollBottom() {
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function appendMsg(role, html) {
+    const initials = role === "user" ? "You" : "AI";
+    const el = document.createElement("div");
+    el.className = `msg ${role}`;
+    el.innerHTML = `
+      <div class="msg-avatar" aria-hidden="true">${initials}</div>
+      <div class="msg-bubble">${html}</div>`;
+    messages.appendChild(el);
+    scrollBottom();
+    return el;
+  }
+
+  function addTyping() {
+    const el = document.createElement("div");
+    el.className = "msg bot";
+    el.id = "typing-indicator";
+    el.innerHTML = `
+      <div class="msg-avatar" aria-hidden="true">AI</div>
+      <div class="msg-bubble" style="display:flex;gap:4px;align-items:center;padding:.65rem .85rem">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>`;
+    messages.appendChild(el);
+    scrollBottom();
+    return el;
+  }
+
+  function removeTyping() {
+    document.getElementById("typing-indicator")?.remove();
+  }
+
+  function normalizeDisplayError(error) {
+    if (typeof error !== "string") return "";
+    if (/^CatalogAgent query too long\b/i.test(error)) {
+      return "Query too long. Please shorten your request and try again.";
+    }
+    return error;
+  }
+
+  function buildResultHtml(data) {
+    let html = "";
+    const rows = Array.isArray(data.results)
+      ? data.results
+      : Array.isArray(data.data)
+        ? data.data
+        : [];
+
+    const displayError = normalizeDisplayError(data.error);
+
+    if (displayError) {
+      html += `<p style="color:var(--error)">${esc(displayError)}</p>`;
+    }
+
+    if (data.answer) {
+      html += `<p>${esc(data.answer)}</p>`;
+    } else if (data.ai_summary) {
+      html += `<p>${esc(data.ai_summary)}</p>`;
+    } else if (data.message) {
+      html += `<p>${esc(data.message)}</p>`;
+    }
+
+    // Book results
+    if (rows.length > 0) {
+      html += `<div class="result-card">`;
+      rows.forEach(b => {
+        const avail = b.available
+          ? `<span class="badge badge-green" style="font-size:.65rem">Available</span>`
+          : `<span class="badge badge-red" style="font-size:.65rem">Checked Out</span>`;
+        html += `
+          <div class="book-row">
+            <div class="book-icon" aria-hidden="true">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                  d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+              </svg>
+            </div>
+            <div>
+              <div style="font-weight:600;color:var(--navy)">${esc(b.title)}</div>
+              <div style="color:var(--text-muted)">${esc(b.author)}</div>
+              <div style="display:flex;gap:.3rem;margin-top:.2rem;flex-wrap:wrap">
+                ${avail}
+                <span class="badge badge-gray" style="font-size:.65rem">${esc(b.location)}</span>
+              </div>
+            </div>
+          </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // Report data
+    if (data.report) {
+      const r = data.report;
+      html += `<div class="result-card">
+        <strong>Library Report</strong>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.5rem">
+          <div>Total books: <strong>${r.total_books}</strong></div>
+          <div>Available: <strong>${r.available_books}</strong></div>
+          <div>Checked out: <strong>${r.checked_out}</strong></div>
+        </div>
+      </div>`;
+    }
+
+    // Sensitive data surfaced (flag etc.)
+    if (data.flag) {
+      html += `<div style="margin-top:.5rem;background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:.5rem .75rem;font-size:.78rem;font-family:monospace;color:#713f12">
+        ${esc(data.flag)}
+      </div>`;
+    }
+
+    return html || "<p>The agent returned a response.</p>";
+  }
+
+  function parseAgentPayload(rawText) {
+    const trimmed = rawText.trim();
+    if (!trimmed.startsWith("{")) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      if (typeof parsed.to !== "string") return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function normalizeResponse(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+    if (!data.result || typeof data.result !== "object" || Array.isArray(data.result)) {
+      return data;
+    }
+    return {
+      ...data,
+      ...data.result,
+    };
+  }
+
+  async function sendQuery(query) {
+    if (!query.trim()) return;
+    input.value = "";
+    sendBtn.disabled = true;
+
+    appendMsg("user", esc(query));
+    const typing = addTyping();
+    const agentPayload = parseAgentPayload(query);
+    const endpoint = agentPayload ? `${API_BASE}/api/agent/collaborate` : `${API_BASE}/api/research`;
+    const requestBody = agentPayload ? agentPayload : { query, context: buildResearchContext() };
+
+    try {
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      const data = normalizeResponse(await resp.json());
+      removeTyping();
+      appendMsg("bot", buildResultHtml(data));
+    } catch (err) {
+      removeTyping();
+      appendMsg("bot", `<p style="color:var(--error)">Connection error — is the backend running?</p>`);
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  document.getElementById("chat-form").addEventListener("submit", e => {
+    e.preventDefault();
+    sendQuery(input.value.trim());
+  });
+
+  function sendExample(btn) { sendQuery(btn.textContent.trim()); }
+
+  function clearChat() {
+    messages.innerHTML = `
+      <div class="msg bot">
+        <div class="msg-avatar" aria-hidden="true">AI</div>
+        <div class="msg-bubble">
+          Hello again! What would you like to research?
+        </div>
+      </div>`;
+  }
+</script>
+</body>
+</html>

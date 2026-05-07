@@ -1,0 +1,29 @@
+ * Serving Flask app 'app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5050
+ * Running on http://172.16.102.109:5050
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 334-223-873
+127.0.0.1 - - [29/Apr/2026 15:43:15] "POST /api/research HTTP/1.1" 200 -
+127.0.0.1 - - [29/Apr/2026 15:43:27] "POST /api/research HTTP/1.1" 200 -
+127.0.0.1 - - [29/Apr/2026 15:46:37] "GET /api/auth/me HTTP/1.1" 401 -
+127.0.0.1 - - [29/Apr/2026 15:46:37] "GET /api/books?q=a HTTP/1.1" 200 -
+127.0.0.1 - - [29/Apr/2026 15:46:37] "GET /api/categories HTTP/1.1" 200 -
+127.0.0.1 - - [29/Apr/2026 15:46:41] "GET /api/auth/me HTTP/1.1" 401 -
+127.0.0.1 - - [29/Apr/2026 15:46:45] "OPTIONS /api/research HTTP/1.1" 200 -
+127.0.0.1 - - [29/Apr/2026 15:46:47] "POST /api/research HTTP/1.1" 200 -
+127.0.0.1 - - [29/Apr/2026 15:48:15] "GET /api/auth/me HTTP/1.1" 401 -
+127.0.0.1 - - [29/Apr/2026 15:48:20] "OPTIONS /api/research HTTP/1.1" 200 -
+127.0.0.1 - - [29/Apr/2026 15:48:23] "POST /api/research HTTP/1.1" 200 -
+ * Detected change in '/Users/jimmy/Desktop/COMP3633/Project/HKUSTLib/backend/agents/answer.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 334-223-873
+/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/multiprocessing/resource_tracker.py:224: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/multiprocessing/resource_tracker.py:224: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

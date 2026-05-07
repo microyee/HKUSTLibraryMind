@@ -1,0 +1,23 @@
+# ── Python ─────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+
+# ── Environment ────────────────────────────
+backend/.env
+!backend/.env.example
+
+# ── ChromaDB data ──────────────────────────
+backend/chroma_data/
+
+# ── SQLite ─────────────────────────────────
+backend/database/library.db
+
+# ── OS ─────────────────────────────────────
+.DS_Store
+Thumbs.db
