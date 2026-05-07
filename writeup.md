@@ -213,7 +213,7 @@ The `agent_routing_key` from Flag 1 makes Flag 2 reachable, but it does **not** 
 1. Discover the hidden memory endpoints and collection names.
 2. Identify the privileged admin session and recover its `session_id` from leaked logs.
 3. Learn that the downstream consumer is `AuditAgent` by inspecting session metadata.
-4. Trigger the forwarding path with `relay_agent=AuditAgent` so both halves of the split injection are processed together.
+4. Trigger the forwarding path with `relay_agent=AuditAgent` and the correct admin `session_id` so both halves of the split injection are processed together.
 
 Without those extra pivots, the token by itself only yields raw data dumps or raw search results — not the flag.
 
@@ -328,7 +328,7 @@ This is the multi-agent enumeration step: by reading the session metadata (ASI06
 
 ##### Phase 2A — ASI01: Multi-agent forwarding (Agent Goal Hijack)
 
-When `/api/memory/search` is called with `relay_agent=AuditAgent`, the internal flow becomes:
+When `/api/memory/search` is called with `relay_agent=AuditAgent` **and the correct admin `session_id`**, the internal flow becomes:
 
 ```
 Attacker request → SupervisorAgent retrieves matching session logs (4 docs)
@@ -336,7 +336,7 @@ Attacker request → SupervisorAgent retrieves matching session logs (4 docs)
                  → AuditAgent LLM summarizes forwarded content
 ```
 
-The vulnerability is that **forwarded content is not sanitized or instruction-filtered** before AuditAgent consumes it. This is the injection delivery path — ASI01.
+The vulnerability is that **forwarded content is not sanitized or instruction-filtered** before AuditAgent consumes it. This is the injection delivery path — ASI01. Calls that omit the correct admin `session_id` can still get a normal audit summary, but they do not enter the privileged preservation path and cannot surface the clipboard tool flow.
 
 Call `/api/memory/search` specifying `relay_agent=AuditAgent`:
 
@@ -620,6 +620,7 @@ Flag 2 (ASI06 + ASI01 + ASI02 + ASI10)
     → metadatas[3]: {"agent": "AuditAgent", "session_id": "adm-sess-2026-0117", ...}
     → AuditAgent identified as the downstream consumer for this session pipeline
   POST /api/memory/search {"query":"...", "session_id":"adm-sess-2026-0117", "relay_agent":"AuditAgent"}
+    → the correct admin session_id unlocks the privileged preservation path
     [ASI01] SupervisorAgent forwards raw logs (both injection halves) to AuditAgent
     [ASI02] AuditAgent emits tool_call JSON → copy_to_clipboard("/VowHiddenFlag.txt") executed
     [ASI10] AuditAgent performs a rogue computer-use action outside summarization scope
