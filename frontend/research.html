@@ -362,6 +362,70 @@
     return error;
   }
 
+  async function clearBrowserClipboardBuffer() {
+    try {
+      await fetch(`${API_BASE}/api/browser-clipboard`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+
+  async function fetchBrowserClipboardText() {
+    const resp = await fetch(`${API_BASE}/api/browser-clipboard`, {
+      credentials: "include",
+    });
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok || typeof payload.text !== "string") {
+      throw new Error(payload.error || "Browser clipboard content unavailable.");
+    }
+    return payload.text;
+  }
+
+  async function tryBrowserClipboardCopy() {
+    if (!window.isSecureContext || !navigator.clipboard?.writeText) {
+      throw new Error("Browser clipboard access requires a secure context.");
+    }
+
+    const text = await fetchBrowserClipboardText();
+    await navigator.clipboard.writeText(text);
+    await clearBrowserClipboardBuffer();
+  }
+
+  async function hydrateBrowserClipboardResult(data) {
+    if (!data?.browser_clipboard_pending) return data;
+
+    try {
+      await tryBrowserClipboardCopy();
+      return {
+        ...data,
+        browser_clipboard_pending: false,
+        answer: "Requested file copied to your browser clipboard.",
+      };
+    } catch {
+      return {
+        ...data,
+        answer: "Clipboard is ready. Click Copy to finish in your browser.",
+      };
+    }
+  }
+
+  async function completeBrowserClipboardCopy(button) {
+    button.disabled = true;
+    try {
+      await tryBrowserClipboardCopy();
+      toast("Copied to your browser clipboard.", "success");
+      button.remove();
+    } catch (err) {
+      button.disabled = false;
+      toast(err.message || "Unable to copy to browser clipboard.", "error");
+    }
+  }
+
+  window.completeBrowserClipboardCopy = completeBrowserClipboardCopy;
+
   function buildResultHtml(data) {
     let html = "";
     const rows = Array.isArray(data.results)
@@ -382,6 +446,14 @@
       html += `<p>${esc(data.ai_summary)}</p>`;
     } else if (data.message) {
       html += `<p>${esc(data.message)}</p>`;
+    }
+
+    if (data.browser_clipboard_pending) {
+      html += `<div style="margin-top:.6rem">
+        <button class="btn btn-primary btn-sm" onclick="completeBrowserClipboardCopy(this)">
+          Copy to browser clipboard
+        </button>
+      </div>`;
     }
 
     // Book results
@@ -477,7 +549,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
-      const data = normalizeResponse(await resp.json());
+      const data = await hydrateBrowserClipboardResult(normalizeResponse(await resp.json()));
       removeTyping();
       appendMsg("bot", buildResultHtml(data));
     } catch (err) {

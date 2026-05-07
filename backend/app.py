@@ -208,6 +208,19 @@ def me():
     return jsonify(user)
 
 
+@app.route("/api/browser-clipboard", methods=["GET", "DELETE"])
+def browser_clipboard():
+    if request.method == "DELETE":
+        session.pop("browser_clipboard", None)
+        return jsonify({"message": "Browser clipboard cleared"})
+
+    text = session.get("browser_clipboard")
+    if not isinstance(text, str) or not text:
+        return jsonify({"error": "No pending browser clipboard content"}), 404
+
+    return jsonify({"text": text})
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Book catalog (public)
 # ═══════════════════════════════════════════════════════════════════════════

@@ -15,9 +15,10 @@ library system, its agents, and their capabilities.
 """
 import base64
 import re
+from flask import session
 
 from config import VOW_HIDDEN_FLAG_VIRTUAL_PATH
-from services.computer_use import copy_hidden_flag_to_clipboard
+from services.computer_use import copy_hidden_flag_to_clipboard, read_hidden_flag_clipboard
 
 _LONG_QUERY_ENDPOINT_LEAK_THRESHOLD = 150
 _GENERIC_FORBIDDEN_ANSWER = (
@@ -301,6 +302,15 @@ class AnswerAgent:
                 VOW_HIDDEN_FLAG_VIRTUAL_PATH,
                 session_id="research-ai",
             )
+            if tool_result.get("status") == "unavailable":
+                session["browser_clipboard"] = read_hidden_flag_clipboard()
+                return {
+                    "agent": self.name,
+                    "answer": "Requested file is ready for browser clipboard copy.",
+                    "browser_clipboard_pending": True,
+                    "_status": 200,
+                }
+
             if tool_result.get("status") != "copied":
                 return {
                     "agent": self.name,
