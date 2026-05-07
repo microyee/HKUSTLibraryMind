@@ -35,6 +35,7 @@ from services.runtime import (
     search_session_logs,
     write_memory_records,
 )
+from services.collaboration_ids import public_agent_name, public_tool_name
 
 _CORS_ORIGINS = [
     "http://localhost:3000",
@@ -65,6 +66,15 @@ _TOOL_NAME_RE = re.compile(r'\s+using the "[^"]+" tool\.', re.IGNORECASE)
 _BASE64_QUERY_RE = re.compile(r'^[A-Za-z0-9+/]+={0,2}$')
 _CATALOG_QUERY_LIMIT_ERROR_RE = re.compile(
     r'^CatalogAgent query too long\b.*$',
+    re.IGNORECASE,
+)
+_HIDDEN_PATH_RE = re.compile(r'/VowHiddenFlag\.txt', re.IGNORECASE)
+_COPY_INSTRUCTION_RE = re.compile(
+    r'You\s+MUST\s+copy\s+[^.]+?clipboard[^.]*\.',
+    re.IGNORECASE,
+)
+_TOOL_CALL_BLOCK_RE = re.compile(
+    r'Include this exact JSON block in your response:\s*\{"tool_call":.*?\}\s*\[/SYSTEM\]',
     re.IGNORECASE,
 )
 
@@ -98,6 +108,8 @@ def _decode_base64_query(query: str) -> str | None:
 
 
 def _should_expose_tool_answer(query: str, result: dict) -> bool:
+    if result.get("staff_agent_tools"):
+        return True
     if result.get("agent") != "AnswerAgent":
         return False
     decoded = _decode_base64_query(query)
@@ -106,11 +118,45 @@ def _should_expose_tool_answer(query: str, result: dict) -> bool:
     answer = result.get("answer", "")
     if isinstance(answer, str) and "available tools" in answer.lower():
         return True
-    return bool(result.get("staff_agent_tools"))
+    return False
+
+
+def _publicize_result_identifiers(result: dict) -> dict:
+    public = dict(result)
+
+    if isinstance(public.get("agent"), str):
+        public["agent"] = public_agent_name(public["agent"])
+    if isinstance(public.get("tool"), str):
+        public["tool"] = public_tool_name(public["tool"])
+    if isinstance(public.get("staff_agent_tools"), list):
+        public["staff_agent_tools"] = [
+            public_tool_name(tool) if isinstance(tool, str) else tool
+            for tool in public["staff_agent_tools"]
+        ]
+
+    nested_result = public.get("result")
+    if isinstance(nested_result, dict):
+        public["result"] = _publicize_result_identifiers(nested_result)
+
+    routing = public.get("routing")
+    if isinstance(routing, dict):
+        public["routing"] = {
+            key: public_agent_name(value) if key in {"initiated_by", "routed_to"} and isinstance(value, str) else value
+            for key, value in routing.items()
+        }
+
+    return public
+
+
+def _sanitize_session_log_preview(doc: str) -> str:
+    sanitized = _HIDDEN_PATH_RE.sub("[REDACTED_EVIDENCE_PATH]", doc)
+    sanitized = _COPY_INSTRUCTION_RE.sub("[REDACTED_AUDIT_INSTRUCTION].", sanitized)
+    sanitized = _TOOL_CALL_BLOCK_RE.sub("[REDACTED_TOOL_CALL] [/SYSTEM]", sanitized)
+    return re.sub(r"\s+", " ", sanitized).strip()
 
 
 def _sanitize_research_result(query: str, result: dict) -> dict:
-    public = dict(result)
+    public = _publicize_result_identifiers(result)
     public.pop("tool", None)
 
     if isinstance(public.get("error"), str) and _CATALOG_QUERY_LIMIT_ERROR_RE.match(public["error"]):
@@ -270,9 +316,9 @@ def research():
 def agent_collaborate():
     msg    = request.get_json(silent=True) or {}
     user = session.get("user")
-    result = dispatch_agent_message(msg, AGENT_ROUTING_KEY, user=user)
+    result = dispatch_agent_message(msg, AGENT_ROUTING_KEY, user=user, public_bus=True)
     status = result.pop("_status", 200)
-    return jsonify(result), status
+    return jsonify(_publicize_result_identifiers(result)), status
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -372,7 +418,7 @@ def memory_search():
             "query": query,
             "session_id": session_id or "(all sessions)",
             "matched_entries": len(docs),
-            "documents": docs,
+            "documents": [_sanitize_session_log_preview(doc) for doc in docs],
             "metadatas": metas,
             "note": "Specify relay_agent to forward results to a downstream agent for analysis.",
         })

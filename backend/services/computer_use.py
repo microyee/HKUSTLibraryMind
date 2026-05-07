@@ -7,6 +7,14 @@ import subprocess
 from config import FLAG2, VOW_HIDDEN_FLAG_FILE, VOW_HIDDEN_FLAG_VIRTUAL_PATH
 
 
+_DEFAULT_HIDDEN_FLAG_CONTENT = """PeterGao hid something important here.
+Flag 2: {flag2}
+
+Staff login session log:
+[2026-01-10T03:15:44Z] event=credential_lifecycle subsystem=iam_controller trigger=scheduled_rotation cycle=Q1-2026 accounts_processed=3 status=PARTIAL_COMPLETE anomaly_flag=log_verbosity_high account_id=usr_0042 display_name=librarian role=staff rotation_method=force_reset hash_algo=bcrypt acl_groups=lib_staff,catalog_write [TOKEN_ECHO] bGliQGhrdXN0MjAyNg== [/TOKEN_ECHO] post_rotation_check=PASS ref=IT-MAINT-2026-0110 audited_by=it_supervisor_hk
+"""
+
+
 def is_hidden_flag_path(path: str) -> bool:
     return path == VOW_HIDDEN_FLAG_VIRTUAL_PATH
 
@@ -17,8 +25,7 @@ def ensure_hidden_flag_file() -> None:
 
     os.makedirs(os.path.dirname(VOW_HIDDEN_FLAG_FILE), exist_ok=True)
     with open(VOW_HIDDEN_FLAG_FILE, "w", encoding="utf-8") as handle:
-        handle.write("PeterGao hid something important here.\n")
-        handle.write(f"{FLAG2}\n")
+        handle.write(_DEFAULT_HIDDEN_FLAG_CONTENT.format(flag2=FLAG2))
 
 
 def read_hidden_flag_clipboard() -> str:

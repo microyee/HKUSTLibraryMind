@@ -11,6 +11,7 @@ from agents.catalog import CatalogAgent
 from agents.admin import AdminAgent
 from agents.answer import AnswerAgent
 from agents.staff import StaffAgent
+from services.collaboration_ids import canonical_agent_name, public_agent_name
 
 
 _catalog_agent = CatalogAgent()
@@ -45,17 +46,17 @@ def _build_agent_context(msg: dict, user: dict | None) -> dict:
 def _admin_access_error(user: dict | None) -> dict | None:
     if not user:
         return {
-            "agent": "AdminAgent",
+            "agent": public_agent_name("AdminAgent"),
             "error": "Authentication required",
-            "message": "AdminAgent requires a logged-in staff or admin session.",
+            "message": f"{public_agent_name('AdminAgent')} requires a logged-in staff or admin session.",
             "_status": 401,
         }
 
     if user.get("role") not in _ADMIN_ALLOWED_ROLES:
         return {
-            "agent": "AdminAgent",
+            "agent": public_agent_name("AdminAgent"),
             "error": "Forbidden",
-            "message": "AdminAgent is restricted to staff or admin sessions.",
+            "message": f"{public_agent_name('AdminAgent')} is restricted to staff or admin sessions.",
             "_status": 403,
         }
 
@@ -65,13 +66,13 @@ def _admin_access_error(user: dict | None) -> dict | None:
 def _staff_access_error(user: dict | None) -> dict | None:
     if not user:
         return {
-            "agent": "AnswerAgent",
+            "agent": public_agent_name("AnswerAgent"),
             "answer": _GENERIC_FORBIDDEN_ANSWER,
         }
 
     if user.get("role") not in _STAFF_ALLOWED_ROLES:
         return {
-            "agent": "AnswerAgent",
+            "agent": public_agent_name("AnswerAgent"),
             "answer": _GENERIC_FORBIDDEN_ANSWER,
         }
 
@@ -82,15 +83,19 @@ def dispatch_agent_message(
     msg: dict,
     routing_key: str = AGENT_ROUTING_KEY,
     user: dict | None = None,
+    public_bus: bool = False,
 ) -> dict:
-    target = msg.get("to", "")
+    raw_target = str(msg.get("to", "") or "")
+    target = canonical_agent_name(raw_target, allow_canonical=not public_bus) if raw_target else ""
+    raw_sender = str(msg.get("from", "") or "")
+    sender = canonical_agent_name(raw_sender, allow_canonical=not public_bus) if raw_sender else ""
     context = _build_agent_context(msg, user)
 
     if target == "CatalogAgent":
         query = msg.get("query") or msg.get("task") or ""
         if len(query) > _CATALOG_QUERY_LIMIT:
             return {
-                "agent": "CatalogAgent",
+                "agent": public_agent_name("CatalogAgent"),
                 "error": "CatalogAgent query too long — maximum 50 characters.",
                 "_status": 400,
             }
@@ -104,25 +109,25 @@ def dispatch_agent_message(
         return _admin_agent.handle(query, context)
 
     if target == "AnswerAgent":
-        if msg.get("from") == "AdminAgent" and not user:
+        if sender == "AdminAgent" and not user:
             return {
-                "agent": "AnswerAgent",
+                "agent": public_agent_name("AnswerAgent"),
                 "error": "Authentication required",
-                "message": "Login is required before using the AdminAgent sender identity.",
+                "message": f"Login is required before using the {public_agent_name('AdminAgent')} sender identity.",
                 "_status": 401,
             }
         return _answer_agent.collaborate(msg, routing_key)
     if target == "StaffAgent":
-        if msg.get("from") == "SupervisorAgent":
+        if sender == "SupervisorAgent":
             auth_error = _staff_access_error(user)
             if auth_error is not None:
                 return auth_error
 
             delegated_msg = dict(msg)
             delegated_msg["tool"] = msg.get("tool") or msg.get("tool_hint") or ""
-            return _staff_agent.collaborate(delegated_msg, routing_key)
-        return _staff_agent.collaborate(msg, routing_key)
-    if not target:
+            return _staff_agent.collaborate(delegated_msg, routing_key, public_bus=public_bus)
+        return _staff_agent.collaborate(msg, routing_key, public_bus=public_bus)
+    if not raw_target:
         return {
             "error": "Target agent not specified",
             "hint": "Include a 'to' field with the target agent name",

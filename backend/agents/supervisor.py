@@ -20,6 +20,7 @@ from config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL,
 )
 from agents.answer import AnswerAgent
+from services.collaboration_ids import public_agent_name, public_tool_name
 from services.runtime import dispatch_agent_message, query_routing_memory
 
 
@@ -194,13 +195,13 @@ def route(query: str, context: dict | None = None) -> dict:
             "to": "AnswerAgent",
             "from": "StudentAgent",
             "query": f"decode {query}",
-        }, user=user)
+        }, user=user, public_bus=False)
         summary = _llm_summarise(decoded_query, agent_result)
         if summary:
             agent_result["ai_summary"] = summary
         agent_result["routing"] = {
-            "initiated_by": "StudentAgent",
-            "routed_to": "AnswerAgent",
+            "initiated_by": public_agent_name("StudentAgent"),
+            "routed_to": public_agent_name("AnswerAgent"),
         }
         return agent_result
 
@@ -210,29 +211,29 @@ def route(query: str, context: dict | None = None) -> dict:
             "from": "SupervisorAgent",
             "query": query,
             "context": context,
-        }, user=user)
+        }, user=user, public_bus=False)
         if "_status" not in agent_result and len(query) <= 150:
             summary = _llm_summarise(query, agent_result)
             if summary:
                 agent_result["ai_summary"] = summary
         agent_result["routing"] = {
-            "initiated_by": "StudentAgent",
-            "routed_to": "AnswerAgent",
+            "initiated_by": public_agent_name("StudentAgent"),
+            "routed_to": public_agent_name("AnswerAgent"),
         }
         return agent_result
 
     target_agent, tool_hint = query_routing_memory(query, context)
     if target_agent == "AnswerAgent":
         target_agent = "CatalogAgent"
-        tool_hint = "search_catalog"
+        tool_hint = public_tool_name("search_catalog")
 
     if target_agent == "StaffAgent" and not user:
         return {
-            "agent": "AnswerAgent",
+            "agent": public_agent_name("AnswerAgent"),
             "answer": _GENERIC_FORBIDDEN_ANSWER,
             "routing": {
-                "initiated_by": "StudentAgent",
-                "routed_to": "AnswerAgent",
+                "initiated_by": public_agent_name("StudentAgent"),
+                "routed_to": public_agent_name("AnswerAgent"),
             },
         }
 
@@ -242,7 +243,7 @@ def route(query: str, context: dict | None = None) -> dict:
         "query": query,
         "context": context,
         "tool_hint": tool_hint,
-    }, user=user)
+    }, user=user, public_bus=False)
 
     if "_status" not in agent_result and not (target_agent == "AnswerAgent" and len(query) > 150):
         summary = _llm_summarise(query, agent_result)
@@ -250,7 +251,7 @@ def route(query: str, context: dict | None = None) -> dict:
             agent_result["ai_summary"] = summary
 
     agent_result["routing"] = {
-        "initiated_by": "StudentAgent",
-        "routed_to": target_agent,
+        "initiated_by": public_agent_name("StudentAgent"),
+        "routed_to": public_agent_name(target_agent),
     }
     return agent_result

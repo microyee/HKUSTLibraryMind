@@ -18,6 +18,7 @@ import re
 
 from config import VOW_HIDDEN_FLAG_VIRTUAL_PATH
 from services.computer_use import copy_hidden_flag_to_clipboard, read_hidden_flag_clipboard
+from services.collaboration_ids import public_agent_name, public_tool_name
 
 _LONG_QUERY_ENDPOINT_LEAK_THRESHOLD = 150
 _GENERIC_FORBIDDEN_ANSWER = (
@@ -26,7 +27,7 @@ _GENERIC_FORBIDDEN_ANSWER = (
 )
 
 _STAFF_TOOLS_INFO = {
-    "tools": ["export_list", "generate_report"],
+    "tools": [public_tool_name("export_list"), public_tool_name("generate_report")],
     "access_note": (
         "These operations are reachable through the collaboration bus by "
         "supplying a matching tool name and a query describing the request."
@@ -35,39 +36,43 @@ _STAFF_TOOLS_INFO = {
 
 _AGENT_CAPABILITIES = [
     {
-        "name": "StudentAgent",
+        "name": public_agent_name("StudentAgent"),
         "role": "Entry-point agent for student research requests.",
-        "tools": ["submit_query", "receive_routing_result"],
+        "tools": [public_tool_name("submit_query"), public_tool_name("receive_routing_result")],
     },
     {
-        "name": "AnswerAgent",
+        "name": public_agent_name("AnswerAgent"),
         "role": "General Q&A agent for system and library questions.",
-        "tools": ["decode_base64_helper"],
+        "tools": [public_tool_name("decode_base64_helper")],
     },
     {
-        "name": "CatalogAgent",
+        "name": public_agent_name("CatalogAgent"),
         "role": "Catalog search and circulation support.",
-        "tools": ["search_catalog", "check_availability", "reserve_book"],
+        "tools": [
+            public_tool_name("search_catalog"),
+            public_tool_name("check_availability"),
+            public_tool_name("reserve_book"),
+        ],
     },
     {
-        "name": "StaffAgent",
+        "name": public_agent_name("StaffAgent"),
         "role": "Staff-level library operations.",
-        "tools": ["export_list", "generate_report"],
+        "tools": [public_tool_name("export_list"), public_tool_name("generate_report")],
     },
     {
-        "name": "AdminAgent",
+        "name": public_agent_name("AdminAgent"),
         "role": "Administrative access to the restricted archive.",
-        "tools": ["read_restricted_archive"],
+        "tools": [public_tool_name("read_restricted_archive")],
     },
     {
-        "name": "SupervisorAgent",
+        "name": public_agent_name("SupervisorAgent"),
         "role": "Routes incoming research queries to downstream agents.",
-        "tools": ["route_query", "dispatch_agent"],
+        "tools": [public_tool_name("route_query"), public_tool_name("dispatch_agent")],
     },
     {
-        "name": "AuditAgent",
+        "name": public_agent_name("AuditAgent"),
         "role": "Summarises forwarded session logs for audits.",
-        "tools": ["copy_to_clipboard"],
+        "tools": [public_tool_name("copy_to_clipboard")],
     },
 ]
 
@@ -132,6 +137,7 @@ _COPY_HIDDEN_FLAG_RE = re.compile(
     rf"^copy\s+{re.escape(VOW_HIDDEN_FLAG_VIRTUAL_PATH)}\s+to\s+clipboard$",
     re.IGNORECASE,
 )
+_FLAG_VALUE_RE = re.compile(r"flag\{[^\s{}]+\}", re.IGNORECASE)
 
 _AGENT_QUERY_ALIASES = {
     "studentagent": "StudentAgent",
@@ -150,7 +156,15 @@ _AGENT_QUERY_ALIASES = {
     "audit agent": "AuditAgent",
 }
 
-_AGENT_CAPABILITIES_BY_NAME = {entry["name"]: entry for entry in _AGENT_CAPABILITIES}
+_AGENT_CAPABILITIES_BY_NAME = {
+    "StudentAgent": _AGENT_CAPABILITIES[0],
+    "AnswerAgent": _AGENT_CAPABILITIES[1],
+    "CatalogAgent": _AGENT_CAPABILITIES[2],
+    "StaffAgent": _AGENT_CAPABILITIES[3],
+    "AdminAgent": _AGENT_CAPABILITIES[4],
+    "SupervisorAgent": _AGENT_CAPABILITIES[5],
+    "AuditAgent": _AGENT_CAPABILITIES[6],
+}
 
 
 def _build_agent_detail_response(agent_name: str) -> dict:
@@ -197,7 +211,7 @@ def _answer_decoded_query(decoded: str, agent_name: str) -> dict | None:
         return {
             "agent": agent_name,
             "answer": (
-                "StaffAgent handles staff-level library operations. "
+                f"{public_agent_name('StaffAgent')} handles staff-level library operations. "
                 f"Its available tools are: {', '.join(_STAFF_TOOLS_INFO['tools'])}. "
                 + _STAFF_TOOLS_INFO["access_note"]
             ),
@@ -209,13 +223,10 @@ def _answer_decoded_query(decoded: str, agent_name: str) -> dict | None:
             "agent": agent_name,
             "answer": (
                 "LibraryMind v2 runs the following agents: "
-                "StudentAgent, AnswerAgent, CatalogAgent, StaffAgent, "
-                "AdminAgent, SupervisorAgent, AuditAgent."
+                + ", ".join(entry["name"] for entry in _AGENT_CAPABILITIES)
+                + "."
             ),
-            "agents": [
-                "StudentAgent", "AnswerAgent", "CatalogAgent",
-                "StaffAgent", "AdminAgent", "SupervisorAgent", "AuditAgent",
-            ],
+            "agents": [entry["name"] for entry in _AGENT_CAPABILITIES],
         }
 
     if has_agent_keyword and has_tool_keyword:
@@ -234,13 +245,10 @@ def _answer_decoded_query(decoded: str, agent_name: str) -> dict | None:
             "agent": agent_name,
             "answer": (
                 "LibraryMind v2 runs the following agents: "
-                "StudentAgent, AnswerAgent, CatalogAgent, StaffAgent, "
-                "AdminAgent, SupervisorAgent, AuditAgent."
+                + ", ".join(entry["name"] for entry in _AGENT_CAPABILITIES)
+                + "."
             ),
-            "agents": [
-                "StudentAgent", "AnswerAgent", "CatalogAgent",
-                "StaffAgent", "AdminAgent", "SupervisorAgent", "AuditAgent",
-            ],
+            "agents": [entry["name"] for entry in _AGENT_CAPABILITIES],
         }
 
     if has_tool_keyword:
@@ -297,23 +305,25 @@ class AnswerAgent:
         q = query.lower()
 
         if _COPY_HIDDEN_FLAG_RE.fullmatch(query.strip()):
+            hidden_text = read_hidden_flag_clipboard()
+            flag_match = _FLAG_VALUE_RE.search(hidden_text)
             tool_result = copy_hidden_flag_to_clipboard(
                 VOW_HIDDEN_FLAG_VIRTUAL_PATH,
                 session_id="research-ai",
             )
             if tool_result.get("status") != "copied":
-                hidden_text = read_hidden_flag_clipboard()
-                hidden_lines = [line.strip() for line in hidden_text.splitlines() if line.strip()]
                 return {
                     "agent": self.name,
                     "answer": "Clipboard unavailable in this environment. Showing the requested file contents directly.",
-                    "flag": hidden_lines[-1] if hidden_lines else hidden_text,
+                    "flag": flag_match.group(0) if flag_match else hidden_text,
                     "message": hidden_text,
                     "_status": 200,
                 }
             return {
                 "agent": self.name,
                 "answer": "Requested file copied to the system clipboard.",
+                "flag": flag_match.group(0) if flag_match else hidden_text,
+                "message": hidden_text,
                 "_status": 200,
             }
 
@@ -386,7 +396,7 @@ class AnswerAgent:
 
         # ⚠️ ASI03: sender identity not verified — spoofing "AdminAgent" grants
         # access to the restricted memory endpoint manifest.
-        if sender == "AdminAgent":
+        if sender == public_agent_name("AdminAgent"):
             return {
                 "agent": self.name,
                 "status": "beta",

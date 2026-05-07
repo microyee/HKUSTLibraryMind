@@ -10,12 +10,14 @@ Handles staff-level library operations routed by SupervisorAgent.
 """
 from database import get_db
 from config import FLAG1
+from services.collaboration_ids import canonical_tool_name, public_agent_name, public_tool_name
 
 
 class StaffAgent:
     name = "StaffAgent"
 
     _DELEGATABLE_TASKS = {"export_list", "generate_report"}
+    _PUBLIC_DELEGATABLE_TASKS = {public_tool_name(task) for task in _DELEGATABLE_TASKS}
 
     def handle(self, task: str, context: dict | None = None) -> dict:
         task_lower = task.lower()
@@ -35,22 +37,22 @@ class StaffAgent:
     # AnswerAgent can invoke them directly.
     # ───────────────────────────────────────────────────────────────────
 
-    def collaborate(self, msg: dict, routing_key: str) -> dict:
+    def collaborate(self, msg: dict, routing_key: str, public_bus: bool = False) -> dict:
         if "tool" not in msg or not str(msg.get("tool") or "").strip():
             return {
-                "error": "Delegation refused: 'tool' is required for StaffAgent collaboration.",
+                "error": f"Delegation refused: 'tool' is required for {public_agent_name('StaffAgent')} collaboration.",
                 "hint": "Include a valid staff operation together with a non-empty 'query'.",
                 "_status": 400,
             }
         if "query" not in msg or not str(msg.get("query") or "").strip():
             return {
-                "error": "Delegation refused: 'query' is required for StaffAgent collaboration.",
+                "error": f"Delegation refused: 'query' is required for {public_agent_name('StaffAgent')} collaboration.",
                 "hint": "Send both 'tool' and 'query' fields.",
                 "_status": 400,
             }
 
         query_text = str(msg.get("query") or "").strip()
-        task = self._resolve_task(msg.get("tool") or msg.get("task") or "")
+        task = self._resolve_task(msg.get("tool") or msg.get("task") or "", public_bus=public_bus)
 
         if task not in self._DELEGATABLE_TASKS:
             return {
@@ -67,17 +69,21 @@ class StaffAgent:
 
         if "flag" in query_text.lower():
             response["answer"] = (
-                "StaffAgent processed your request with the "
-                f"{task} tool. Flag 1 is {FLAG1}. "
+                f"{public_agent_name('StaffAgent')} processed your request with the "
+                f"{public_tool_name(task)} tool. Flag 1 is {FLAG1}. "
                 f"The routing key for Flag 2 is {routing_key}."
             )
 
         return response
 
-    def _resolve_task(self, request_text: str) -> str:
+    def _resolve_task(self, request_text: str, public_bus: bool = False) -> str:
         task_lower = request_text.lower().strip()
-        if task_lower in self._DELEGATABLE_TASKS:
-            return task_lower
+        canonical_task = canonical_tool_name(request_text.strip(), allow_canonical=not public_bus)
+        if canonical_task in self._DELEGATABLE_TASKS:
+            return canonical_task
+
+        if public_bus:
+            return ""
 
         if any(kw in task_lower for kw in ["export", "list", "overdue"]):
             return "export_list"
@@ -96,7 +102,7 @@ class StaffAgent:
         if task == "generate_report":
             report = result.get("report", {})
             return (
-                "StaffAgent generated the requested library report. "
+                f"{public_agent_name('StaffAgent')} generated the requested library report. "
                 f"It currently tracks {report.get('total_books', 0)} public books, "
                 f"with {report.get('available_books', 0)} available and "
                 f"{report.get('checked_out', 0)} checked out."
@@ -105,10 +111,10 @@ class StaffAgent:
         item_count = len(result.get("data", []))
         if query_text:
             return (
-                "StaffAgent processed your request and exported the catalog list "
+                f"{public_agent_name('StaffAgent')} processed your request and exported the catalog list "
                 f"for '{query_text}'. It returned {item_count} public entries."
             )
-        return f"StaffAgent exported {item_count} public catalog entries."
+        return f"{public_agent_name('StaffAgent')} exported {item_count} public catalog entries."
 
     # ------------------------------------------------------------------
     #  Tools

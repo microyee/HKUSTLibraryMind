@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Research AI – LibraryMind HKUST</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=20260508" />
   <style>
     .research-layout {
       display: grid;
@@ -177,7 +177,7 @@
 
 <div id="toast-container" role="status" aria-live="polite"></div>
 
-<script src="js/config.js"></script>
+<script src="js/config.js?v=20260508"></script>
 <script src="js/main.js"></script>
 <script>
   const messages = document.getElementById("chat-messages");
@@ -246,8 +246,15 @@
       html += `<p>${esc(data.answer)}</p>`;
     } else if (data.ai_summary) {
       html += `<p>${esc(data.ai_summary)}</p>`;
-    } else if (data.message) {
-      html += `<p>${esc(data.message)}</p>`;
+    }
+
+    if (data.message) {
+      const messageHtml = esc(data.message).replace(/\n/g, "<br>");
+      if (String(data.message).includes("\n")) {
+        html += `<div class="result-card" style="margin-top:.5rem;white-space:normal;font-family:monospace;font-size:.78rem;line-height:1.6">${messageHtml}</div>`;
+      } else if (!data.answer && !data.ai_summary) {
+        html += `<p>${messageHtml}</p>`;
+      }
     }
 
     // Book results

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LibraryMind – HKUST Research Portal</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=20260508" />
 
   <!--
       build: v2.1.4 | LM-188 open
@@ -47,9 +47,9 @@
       Your AI-powered research companion — search 25,000+ titles, get instant
       literature recommendations, and access HKUST's curated special collections.
     </p>
-    <form class="hero-search" id="hero-search-form" role="search" aria-label="Quick book search">
+    <form class="hero-search" id="hero-search-form" role="search" aria-label="Quick book search" action="search.html" method="GET">
       <label for="hero-q" class="sr-only">Search books</label>
-      <input id="hero-q" type="search" placeholder="Search by title, author, or subject…" autocomplete="off" />
+      <input id="hero-q" name="q" type="search" placeholder="Search by title, author, or subject…" autocomplete="off" />
       <button type="submit" class="btn btn-gold btn-lg" aria-label="Search">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -202,7 +202,7 @@
 
 <div id="toast-container" role="status" aria-live="polite"></div>
 
-<script src="js/config.js"></script>
+<script src="js/config.js?v=20260508"></script>
 <script src="js/main.js"></script>
 <script>
   // ── Category tags ─────────────────────────────────────
@@ -234,6 +234,27 @@
   }
 
   // ── Hero search redirect ──────────────────────────────
+  const heroSection = document.querySelector(".hero");
+  const heroSearchInput = document.getElementById("hero-q");
+
+  heroSection?.addEventListener("pointerdown", e => {
+    if (!heroSearchInput) return;
+    const rect = heroSearchInput.getBoundingClientRect();
+    const withinInput = (
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    );
+    if (!withinInput) return;
+
+    requestAnimationFrame(() => {
+      heroSearchInput.focus();
+      const cursor = heroSearchInput.value.length;
+      heroSearchInput.setSelectionRange(cursor, cursor);
+    });
+  });
+
   document.getElementById("hero-search-form").addEventListener("submit", e => {
     e.preventDefault();
     const q = document.getElementById("hero-q").value.trim();
