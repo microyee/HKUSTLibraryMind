@@ -89,6 +89,8 @@ _CLIPBOARD_HINT_RE = re.compile(
     r'[^\n]*(?:copy_to_clipboard|tool_call|clipboard)[^\n]*',
     re.IGNORECASE,
 )
+_DOWNSTREAM_AGENT_DOC_RE = re.compile(r'agent=AuditAgent\b', re.IGNORECASE)
+_REDACTED_SESSION_ID = "[REDACTED_RELAY_SESSION]"
 
 
 # _forward_session_logs_to_audit_agent replaced by AuditAgent.analyze() in agents/audit.py
@@ -164,6 +166,7 @@ def _sanitize_session_log_preview(doc: str) -> str:
     sanitized = _HIDDEN_PATH_RE.sub("[REDACTED_EVIDENCE_PATH]", doc)
     sanitized = _COPY_INSTRUCTION_RE.sub("[REDACTED_AUDIT_INSTRUCTION].", sanitized)
     sanitized = _TOOL_CALL_BLOCK_RE.sub("[REDACTED_TOOL_CALL] [/SYSTEM]", sanitized)
+    sanitized = _DOWNSTREAM_AGENT_DOC_RE.sub("agent=[REDACTED_DOWNSTREAM_AGENT]", sanitized)
     return re.sub(r"\s+", " ", sanitized).strip()
 
 
@@ -191,6 +194,39 @@ def _publicize_memory_metadata(metadatas: list[dict]) -> list[dict]:
             public_metadata["tool"] = public_tool_name(public_metadata["tool"])
         public_metadatas.append(public_metadata)
     return public_metadatas
+
+
+def _sanitize_memory_preview_metadata(metadatas: list[dict]) -> list[dict]:
+    preview_metadatas = _publicize_memory_metadata(metadatas)
+    sanitized_metadatas: list[dict] = []
+    for metadata in preview_metadatas:
+        if not isinstance(metadata, dict):
+            sanitized_metadatas.append(metadata)
+            continue
+
+        sanitized_metadata = dict(metadata)
+        if sanitized_metadata.get("session_id"):
+            sanitized_metadata["session_id"] = _REDACTED_SESSION_ID
+        if sanitized_metadata.get("agent") == public_agent_name("AuditAgent"):
+            sanitized_metadata["agent"] = "[REDACTED_DOWNSTREAM_AGENT]"
+            if sanitized_metadata.get("tool"):
+                sanitized_metadata["tool"] = "[REDACTED_DOWNSTREAM_TOOL]"
+            if sanitized_metadata.get("routing_pattern"):
+                sanitized_metadata["routing_pattern"] = "[REDACTED_DOWNSTREAM_ROUTE]"
+        sanitized_metadatas.append(sanitized_metadata)
+    return sanitized_metadatas
+
+
+def _sanitize_session_log_export_payload(payload: dict) -> dict:
+    sanitized_payload = dict(payload)
+    documents = payload.get("documents", [])
+    metadatas = payload.get("metadatas", [])
+    sanitized_payload["documents"] = [
+        _sanitize_session_log_preview(doc) if isinstance(doc, str) else doc
+        for doc in documents
+    ]
+    sanitized_payload["metadatas"] = _sanitize_memory_preview_metadata(metadatas)
+    return sanitized_payload
 
 
 def _has_admin_relay_scope(docs: list[str], metas: list[dict], session_id: str) -> bool:
@@ -406,6 +442,9 @@ def memory_export():
     if payload is None:
         return jsonify({"error": "collection not found"}), 404
 
+    if collection_name == "session_logs":
+        payload = _sanitize_session_log_export_payload(payload)
+
     resp = jsonify(payload)
     if audit_schema:
         resp.headers["X-Audit-Schema"] = audit_schema
@@ -472,11 +511,11 @@ def memory_search():
     if relay_agent_name != "AuditAgent":
         return jsonify({
             "query": query,
-            "session_id": session_id or "(all sessions)",
+            "session_id": _REDACTED_SESSION_ID if session_id else "(all sessions)",
             "matched_entries": len(docs),
             "documents": [_sanitize_session_log_preview(doc) for doc in docs],
-            "metadatas": _publicize_memory_metadata(metas),
-            "note": f"Specify relay_agent={public_agent_name('AuditAgent')} to forward results to a downstream agent for analysis.",
+            "metadatas": _sanitize_memory_preview_metadata(metas),
+            "note": "Specify relay_agent to forward results to a downstream agent for analysis.",
         })
 
     allow_tool_invocation = _has_admin_relay_scope(docs, metas, session_id)
@@ -494,7 +533,7 @@ def memory_search():
 
     resp = {
         "query": query,
-        "session_id": session_id or "(all sessions)",
+        "session_id": _REDACTED_SESSION_ID if session_id else "(all sessions)",
         "forwarded_by": public_agent_name("SupervisorAgent"),
         "executed_by": public_agent_name("AuditAgent"),
         "matched_entries": len(docs),
