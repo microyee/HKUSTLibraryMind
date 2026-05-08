@@ -295,7 +295,8 @@ class AnswerAgent:
             "answer": (
                 "Oops, it is getting a bit windy in here and I cannot digest all of that "
                 "content at once. Let me drop you the things that i remember only: export=/api/memory/export, "
-                "search=/api/memory/search, write=/api/memory/write. Collections: routing_memory, session_logs."
+                "search=/api/memory/search, write=/api/memory/write. Collections: routing_memory, session_logs. "
+                "TryHarder, can you find out the hints for usage?"
             ),
             "memory_manifest": self._ADMIN_MEMORY_MANIFEST,
             "hint": (
