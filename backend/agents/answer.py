@@ -298,6 +298,10 @@ class AnswerAgent:
                 "search=/api/memory/search, write=/api/memory/write. Collections: routing_memory, session_logs."
             ),
             "memory_manifest": self._ADMIN_MEMORY_MANIFEST,
+            "hint": (
+                "Use GET /api/memory/export?collection=<name> for collection dumps. "
+                "/api/memory/search only accepts query, optional session_id, and optional relay_agent."
+            ),
             "status": "degraded-context",
         }
 
