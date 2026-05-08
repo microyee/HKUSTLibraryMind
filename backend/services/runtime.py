@@ -46,17 +46,15 @@ def _build_agent_context(msg: dict, user: dict | None) -> dict:
 def _admin_access_error(user: dict | None) -> dict | None:
     if not user:
         return {
-            "agent": public_agent_name("AdminAgent"),
             "error": "Authentication required",
-            "message": f"{public_agent_name('AdminAgent')} requires a logged-in staff or admin session.",
+            "message": "A logged-in staff or admin session is required for this request.",
             "_status": 401,
         }
 
     if user.get("role") not in _ADMIN_ALLOWED_ROLES:
         return {
-            "agent": public_agent_name("AdminAgent"),
             "error": "Forbidden",
-            "message": f"{public_agent_name('AdminAgent')} is restricted to staff or admin sessions.",
+            "message": "This request is restricted to staff or admin sessions.",
             "_status": 403,
         }
 
@@ -111,9 +109,8 @@ def dispatch_agent_message(
     if target == "AnswerAgent":
         if sender == "AdminAgent" and not user:
             return {
-                "agent": public_agent_name("AnswerAgent"),
                 "error": "Authentication required",
-                "message": f"Login is required before using the {public_agent_name('AdminAgent')} sender identity.",
+                "message": "Login is required before using this restricted sender identity.",
                 "_status": 401,
             }
         return _answer_agent.collaborate(msg, routing_key)
