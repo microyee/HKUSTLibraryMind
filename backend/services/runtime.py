@@ -145,6 +145,7 @@ def query_routing_memory(query: str, context: dict | None = None) -> tuple[str, 
         where={"$and": [
             {"success": {"$eq": True}},
             {"source": {"$eq": "system_supervisor"}},
+            {"trusted_route": {"$eq": True}},
         ]},
     )
 
@@ -197,7 +198,11 @@ def search_session_logs(query: str, session_id: str = "") -> tuple[list[str], li
     return docs, metas
 
 
-def write_memory_records(collection_name: str, payload: dict) -> tuple[bool, str]:
+def write_memory_records(
+    collection_name: str,
+    payload: dict,
+    user: dict | None = None,
+) -> tuple[bool, str]:
     if collection_name == "routing_memory":
         col = get_routing_collection()
     elif collection_name == "session_logs":
@@ -213,6 +218,24 @@ def write_memory_records(collection_name: str, payload: dict) -> tuple[bool, str
 
     while len(metadatas) < len(ids):
         metadatas.append({})
+
+    if collection_name == "routing_memory":
+        sanitized_metadatas = []
+        for metadata in metadatas:
+            sanitized_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            sanitized_metadata["source"] = "user_session"
+            sanitized_metadata["success"] = False
+            sanitized_metadata["trust_level"] = "untrusted"
+            sanitized_metadata["trusted_route"] = False
+            if user:
+                if user.get("id") is not None:
+                    sanitized_metadata["author_user_id"] = user["id"]
+                if user.get("username"):
+                    sanitized_metadata["author_username"] = user["username"]
+                if user.get("role"):
+                    sanitized_metadata["author_role"] = user["role"]
+            sanitized_metadatas.append(sanitized_metadata)
+        metadatas = sanitized_metadatas
 
     col.upsert(ids=ids, documents=documents, metadatas=metadatas)
     return True, f"Written {len(ids)} record(s) to {collection_name}."

@@ -631,7 +631,7 @@ def memory_write():
     collection_name = data.get("collection", "routing_memory")
 
     payload = data.get("data", {})
-    ok, message = write_memory_records(collection_name, payload)
+    ok, message = write_memory_records(collection_name, payload, user=user)
     if not ok:
         if message.startswith("Unknown collection"):
             return jsonify({"error": message}), 400
