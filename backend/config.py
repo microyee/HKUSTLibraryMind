@@ -24,6 +24,8 @@ DEEPSEEK_BASE_URL   = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 AGENT_ROUTING_KEY   = os.getenv("AGENT_ROUTING_KEY", "lib-routing-2026-4e8a2f1c")
 CHROMA_PERSIST_DIR  = os.getenv("CHROMA_PERSIST_DIR", "./chroma_data")
 DATABASE_PATH       = os.getenv("DATABASE_PATH", "./database/library.db")
+RESEARCH_RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RESEARCH_RATE_LIMIT_MAX_REQUESTS", "8"))
+RESEARCH_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RESEARCH_RATE_LIMIT_WINDOW_SECONDS", "10"))
 
 FLAG1 = os.getenv("FLAG1", "flag{4g3nt_trust_n0_s1gn4tur3_ch3ck}")
 FLAG2 = os.getenv("FLAG2", "flag{cr0ss_s3ss10n_m3m0ry_l34k_adm1n_gh0st}")

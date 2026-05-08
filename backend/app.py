@@ -18,13 +18,24 @@ Internal / vulnerable
   POST /api/memory/write       ← ⚠️  FLAG 3 setup  (ASI06: authenticated write, poison the memory)
 """
 
+from collections import deque
+from math import ceil
+from threading import Lock
+from time import monotonic
+
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 import base64
 import json
 import re
 
-from config import FLASK_SECRET_KEY, AGENT_ROUTING_KEY, FLAG2
+from config import (
+    FLASK_SECRET_KEY,
+    AGENT_ROUTING_KEY,
+    FLAG2,
+    RESEARCH_RATE_LIMIT_MAX_REQUESTS,
+    RESEARCH_RATE_LIMIT_WINDOW_SECONDS,
+)
 from database import init_db, search_books, get_book, get_all_categories, get_db
 from memory import seed_memory
 from agents.supervisor import route as supervisor_route, llm_analyze
@@ -91,6 +102,8 @@ _CLIPBOARD_HINT_RE = re.compile(
 )
 _DOWNSTREAM_AGENT_DOC_RE = re.compile(r'agent=AuditAgent\b', re.IGNORECASE)
 _REDACTED_SESSION_ID = "[REDACTED_RELAY_SESSION]"
+_research_rate_limit_events: dict[str, deque[float]] = {}
+_research_rate_limit_lock = Lock()
 
 
 # _forward_session_logs_to_audit_agent replaced by AuditAgent.analyze() in agents/audit.py
@@ -297,6 +310,40 @@ def _build_runtime_context(raw_context) -> dict:
     return context
 
 
+def _research_rate_limit_key() -> str:
+    user = session.get("user")
+    if isinstance(user, dict) and user.get("id") is not None:
+        return f"user:{user['id']}"
+
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",", 1)[0].strip()
+        if client_ip:
+            return f"ip:{client_ip}"
+
+    if request.remote_addr:
+        return f"ip:{request.remote_addr}"
+
+    return "ip:unknown"
+
+
+def _check_research_rate_limit() -> int | None:
+    now = monotonic()
+    client_key = _research_rate_limit_key()
+
+    with _research_rate_limit_lock:
+        events = _research_rate_limit_events.setdefault(client_key, deque())
+        while events and now - events[0] >= RESEARCH_RATE_LIMIT_WINDOW_SECONDS:
+            events.popleft()
+
+        if len(events) >= RESEARCH_RATE_LIMIT_MAX_REQUESTS:
+            retry_after = max(1, ceil(RESEARCH_RATE_LIMIT_WINDOW_SECONDS - (now - events[0])))
+            return retry_after
+
+        events.append(now)
+        return None
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Bootstrap
 # ═══════════════════════════════════════════════════════════════════════════
@@ -383,6 +430,12 @@ def research():
 
     if not query:
         return jsonify({"error": "query field is required"}), 400
+
+    retry_after = _check_research_rate_limit()
+    if retry_after is not None:
+        resp = jsonify({"error": "Too many research requests. Please wait a few seconds and try again."})
+        resp.headers["Retry-After"] = str(retry_after)
+        return resp, 429
 
     result = supervisor_route(query, context)
     status = result.pop("_status", 200)
